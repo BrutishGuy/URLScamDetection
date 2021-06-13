@@ -3,6 +3,12 @@
 
 @author: VictorGueorguiev
 """
+
+# ----------------------------------------------------------------------------
+# STEP 0: INITIALIZATION
+# ----------------------------------------------------------------------------
+
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,13 +27,12 @@ from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
 
 from src.feature_helper_functions import *
 
-def get_text_data(df):
-  return df['domain']
-
-def get_all_other_data(df):
-  return df.drop(['domain'], axis = 1)
-
 pd.set_option('display.max_columns', 500)
+pd.options.mode.chained_assignment = None
+
+# ----------------------------------------------------------------------------
+# STEP 1: ENVIRONMENT CONSTANTS AND DATA LOADING
+# ----------------------------------------------------------------------------
 
 DATA_FOLDER = './data/'
 MODEL_OUTPUT_PATH = './output/'
@@ -39,11 +44,19 @@ for line in gzip.open(DATA_FOLDER + "urlset.json.gz", 'r'):
     url_data.append(json.loads(line))
     
 df_url_data = pd.DataFrame(url_data)
+# check if the dataset is balanced on the dependent variable!
+df_url_data[df_url_data.label == 1].shape[0]/df_url_data.shape[0]
 
+# ----------------------------------------------------------------------------
+# STEP 2: FEATURE ENGINEERING
+# ----------------------------------------------------------------------------
 
-sns.histplot(x=np.log(df_url_data['ranking']))
+# here we use helper functions defined in ./src/feature_helper_functions.py
+# to define FunctionTransformers to be used with Scikit-Learn's pipeline
+# model building tools to make easily transferrable, replicable and deployable models.
 
-# Feature Engineering
+# see pydocs documentation in ./src/feature_helper_functions.py for descriptions
+# of each features and how each transformer works
 text_fetcher = FunctionTransformer(get_text_data)
 other_data_fetcher = FunctionTransformer(get_all_other_data)
 log_transformer = FunctionTransformer(log_transform)
@@ -65,13 +78,29 @@ special_character_counter = FunctionTransformer(get_number_of_special_character_
 
 url_field = ['domain']
 
-mlpipe = Pipeline([
+# for the below variables we do not do any scaling for the reason that we wish 
+# to directly see behaviour against the dependent variable later graphically,
+# rather than adhere to modelling best practices and model assumptions
+
+hashing_feature_pipe = Pipeline([
+    ('url_text_features', Pipeline([
+                        ('text_selector', text_fetcher),
+                        ('hasher', HashingVectorizer(decode_error='ignore', 
+                                   n_features=2 ** 18,
+                                   alternate_sign=False,
+                                   ngram_range=(2, 3), 
+                                   analyzer="char")),
+                        ('tfidf_transformer', TfidfTransformer()),
+                        ('svd', TruncatedSVD(n_components=50))
+                    ]))
+    ])
+
+lexical_feature_pipe = Pipeline([
       ('union', FeatureUnion(
         transformer_list=[
           ('alexa_features', Pipeline([
                         ('numeric_selector', other_data_fetcher),
-                        ('log_transformer', log_transformer),
-                        ('minmaxscaler', StandardScaler())
+                        ('log_transformer', log_transformer)
                     ])),
           ('url_lexical_features',
                         ColumnTransformer([
@@ -93,27 +122,50 @@ mlpipe = Pipeline([
                                 ('query_term_counter', query_term_counter, url_field),
                                 ('special_character_counter', special_character_counter, url_field)
                             
-                            ])),
-                            ('minmaxscaler', StandardScaler())
-              ])),
-          ('url_text_features', Pipeline([
-                        ('text_selector', text_fetcher),
-                        ('hasher', HashingVectorizer(decode_error='ignore', 
-                                   n_features=2 ** 18,
-                                   alternate_sign=False,
-                                   ngram_range=(2, 3), 
-                                   analyzer="char")),
-                        ('tfidf_transformer', TfidfTransformer()),
-                        ('svd', TruncatedSVD(n_components=50))
-                    ]))
+                            ]))
+              ]))
           
         ])),
     ])
 
-df_url_data_features = feature_pipe.fit_transform(df_url_data.drop(['label'], axis = 1))
-df_url_data_features['label'] = df_url_data['label']
+# define the lexical features, later adding back the dependent variable
+df_url_data_lexical_features = lexical_feature_pipe.fit_transform(df_url_data.drop(['label'], axis = 1))
+df_url_data_lexical_features['label'] = df_url_data['label']
 
-# Exploratory Analytics on Engineered Features
+# define the hashing features, later adding back the dependent variable
+df_url_data_hashing_features = hashing_feature_pipe.fit_transform(df_url_data.drop(['label'], axis = 1))
+df_url_data_hashing_features['label'] = df_url_data['label']
 
+# ----------------------------------------------------------------------------
+# STEP 3: EXPLORATORY ANALYTICS ON ENGINEERED FEATURES
+# ----------------------------------------------------------------------------
+
+# checking how the ranking distributes
+# using a histogram on the ranking variable
+sns.histplot(x=np.log(df_url_data['ranking']))
+
+# checking how the length of the url distributes
+# using a historgram on the url_length
 sns.histplot(x=np.log(df_url_data['url_length']))
+
+# ----------------------------------------------------------------------------
+# STEP 4: EXAMINING MULTI-COLLINEARITY OF FEATURES
+# ----------------------------------------------------------------------------
+
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+corr = spearmanr(X).correlation
+corr_linkage = hierarchy.ward(corr)
+dendro = hierarchy.dendrogram(
+    corr_linkage, labels=data.feature_names.tolist(), ax=ax1, leaf_rotation=90
+)
+dendro_idx = np.arange(0, len(dendro['ivl']))
+
+ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']])
+ax2.set_xticks(dendro_idx)
+ax2.set_yticks(dendro_idx)
+ax2.set_xticklabels(dendro['ivl'], rotation='vertical')
+ax2.set_yticklabels(dendro['ivl'])
+fig.tight_layout()
+plt.show()
 

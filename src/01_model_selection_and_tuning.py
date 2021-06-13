@@ -3,6 +3,10 @@
 @author: VictorGueorguiev
 """
 
+# ----------------------------------------------------------------------------
+# STEP 0: INITIALIZATION
+# ----------------------------------------------------------------------------
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,24 +41,21 @@ from hpsklearn import HyperoptEstimator, any_classifier, any_preprocessing
 from hyperopt import tpe
 
 
-def get_text_data(df):
-    df['domain'] = df['domain'].astype(str)
-    return df['domain']
-
-def get_all_other_data(df):
-    return df.drop(['domain'], axis = 1)
-
+# set pandas options
 pd.set_option('display.max_columns', 500)
 pd.options.mode.chained_assignment = None
+
+# ----------------------------------------------------------------------------
+# STEP 1: ENVIRONMENT CONSTANTS AND DATA LOADING
+# ----------------------------------------------------------------------------
 
 DATA_FOLDER = './data/'
 MODEL_OUTPUT_PATH = './output/'
 TRAIN_MODEL_FROM_SCRATCH = True
-MODEL_RUN_DATE = datetime.today()
+MODEL_RUN_DATE = datetime.today() # current date
 ANALYSIS_PATH = './analysis/'
 
-
-
+# read the data in via gzip and pandas
 url_data = []
 for line in gzip.open(DATA_FOLDER + "urlset.json.gz", 'r'):
     url_data.append(json.loads(line))
@@ -66,12 +67,21 @@ y = df_url_data.label
 
 # NB the dataset is already very balanced, so we do not take additional measures to balance the data
 
+# ----------------------------------------------------------------------------
+# STEP 2: TRAIN TEST SPLIT, FEATURE ENGINEERING
+# ----------------------------------------------------------------------------
+
+
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.4, random_state=42)
 X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, test_size=0.25, random_state=42)
 
 text_fetcher = FunctionTransformer(get_text_data)
 other_data_fetcher = FunctionTransformer(get_all_other_data)
 log_transformer = FunctionTransformer(log_transform)
+
+# ----------------------------------------------------------------------------
+# STEP 3.1: MODEL SELECTION AND HYPERPARAMETER STEP USING HPSKLEARN
+# ----------------------------------------------------------------------------
 
 mlpipe = Pipeline([
   ('text_selector', text_fetcher),
@@ -91,9 +101,19 @@ mlpipe = Pipeline([
 
 mlpipe.fit(X_train, y_train)
 
+d1 = MODEL_RUN_DATE.strftime("%d_%m_%Y")
+dump(mlpipe, MODEL_OUTPUT_PATH + '_hyperopt_sklearn_url_spam_detection_model_selection_hyperparameter_tuning_' + d1 + '.joblib') 
+
 y_pred = mlpipe.predict(X_test)
 y_pred_proba = mlpipe.predict_proba(X_test)[:, 1]
+
+# ----------------------------------------------------------------------------
+# STEP 3.2: REPORTING
+# ----------------------------------------------------------------------------
+
 df_metrics_temp = pd.DataFrame(columns=['RUN_DATE', 'MODEL', 'ACCURACY', 'F1 SCORE MICRO AVG', 'PRECISION SCORE MICRO AVG', 'RECALL SCORE MICRO AVG', 'ROCAUC MICRO AVG'])
+# print to std out
+# calculate accuracy, f1, precision, recall, ROCAUC.
 df_metrics_temp.loc[0] = [MODEL_RUN_DATE, 
                           model_choice,
                             accuracy_score(y_pred, y_test),
@@ -101,6 +121,37 @@ df_metrics_temp.loc[0] = [MODEL_RUN_DATE,
                             precision_score(y_pred, y_test),
                             recall_score(y_pred, y_test),
                             roc_auc_score(y_score=y_pred_proba, y_true=y_test)]
+
+
+print(df_metrics_temp)
+
+# ----------------------------------------------------------------------------
+# STEP 4.1: TUNING FEATURE HASHING HYPERPARAMETERS WITH AN XGBOOST MODEL AS THE CLASSIFIER
+# ----------------------------------------------------------------------------
+
+mlpipe.fit(X_train, y_train)
+
+d1 = MODEL_RUN_DATE.strftime("%d_%m_%Y")
+dump(mlpipe, MODEL_OUTPUT_PATH + '_hyperopt_feature_hashing_hyperparameter_tuning_' + d1 + '.joblib') 
+
+y_pred = mlpipe.predict(X_test)
+y_pred_proba = mlpipe.predict_proba(X_test)[:, 1]
+
+# ----------------------------------------------------------------------------
+# STEP 4.2: REPORTING
+# ----------------------------------------------------------------------------
+
+df_metrics_temp = pd.DataFrame(columns=['RUN_DATE', 'MODEL', 'ACCURACY', 'F1 SCORE MICRO AVG', 'PRECISION SCORE MICRO AVG', 'RECALL SCORE MICRO AVG', 'ROCAUC MICRO AVG'])
+# print to std out
+# calculate accuracy, f1, precision, recall, ROCAUC.
+df_metrics_temp.loc[0] = [MODEL_RUN_DATE, 
+                          model_choice,
+                            accuracy_score(y_pred, y_test),
+                            f1_score(y_pred, y_test),
+                            precision_score(y_pred, y_test),
+                            recall_score(y_pred, y_test),
+                            roc_auc_score(y_score=y_pred_proba, y_true=y_test)]
+
 
 print(df_metrics_temp)
 
