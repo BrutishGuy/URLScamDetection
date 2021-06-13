@@ -26,6 +26,7 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
 from scipy.stats import spearmanr
 from scipy.cluster import hierarchy
+import association_metrics as am
 
 from src.feature_helper_functions import *
 
@@ -180,7 +181,7 @@ plt.show()
 # STEP 4: EXAMINING MULTI-COLLINEARITY OF FEATURES
 # ----------------------------------------------------------------------------
 
-
+# here we check for multicollinearity in the spearman rank correlation coefficients via hierarchical clustering
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
 corr = spearmanr(df_url_data_all_features.drop(['Has IP Address'], axis=1)).correlation
 corr_linkage = hierarchy.ward(corr)
@@ -197,3 +198,22 @@ ax2.set_yticklabels(dendro['ivl'])
 fig.tight_layout()
 plt.show()
 
+# here we check for associations among categorical fields in the data
+# Convert you str columns to Category columns
+cat_data = df_url_data_lexical_features[['Has At Symbol', 'Short URL', 'Hyphen', 'Double Slash', 'Query Terms', 'Label']].sample(frac=0.05).apply(
+        lambda x: x.astype("category"))
+
+# Initialize a CamresV object using you pandas.DataFrame
+cramersv = am.CramersV(cat_data) 
+# will return a pairwise matrix filled with Cramer's V, where columns and index are 
+# the categorical variables of the passed pandas.DataFrame
+cramersvplot = cramersv.fit()
+
+fig, ax1 = plt.subplots(1, 1, figsize=(8, 8))
+ax1.imshow(cramersvplot, cmap='Greens')
+ax1.set_xticks([ i for i in range(len(cat_data.columns))])
+ax1.set_yticks([ i for i in range(len(cat_data.columns))])
+ax1.set_xticklabels(cat_data.columns, rotation='vertical')
+ax1.set_yticklabels(cat_data.columns)
+fig.tight_layout()
+plt.show()

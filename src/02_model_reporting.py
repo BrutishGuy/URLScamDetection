@@ -66,12 +66,12 @@ def main():
     parser.add_argument('--feature_combo_type', type=str, default='all', help='Which feature set to use. Options are "hashing" for hashing trick features, "lexical" for hand-crafted features, or the default, "all" the features.')
   
     opt = parser.parse_args()
-    DATA_FOLDER = './data/' #opt.data_folder
-    MODEL_OUTPUT_PATH = './output/' # opt.output_folder
+    DATA_FOLDER = opt.data_folder
+    MODEL_OUTPUT_PATH = opt.output_folder
     TRAIN_MODEL_FROM_SCRATCH = True
     MODEL_RUN_DATE = datetime.today() # current date
-    ANALYSIS_PATH = './analysis/' # opt.analysis_folder
-    FEATURE_COMBO_TYPE = 'all' # valid options include 'all', 'lexical', 'hashing'
+    ANALYSIS_PATH = opt.analysis_folder
+    FEATURE_COMBO_TYPE = opt.feature_combo_type # valid options include 'all', 'lexical', 'hashing'
     
     # read the data in via gzip and pandas
     
