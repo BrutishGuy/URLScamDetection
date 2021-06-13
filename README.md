@@ -1,11 +1,36 @@
 
 ## Install and Reproduce Results
 
-To run the code in this package, one need only install the necessary packages used for the project. To this end, requirements.txt acts as a guide, or as a literal manual. When using requirements.txt together with pip, it is strongly advised to create a virtual environment to encapsulate code for this project. Run the following:
+To run the code in this package, one need only install the necessary packages used for the project. To this end, requirements.txt acts as a guide, or as a literal manual. When using requirements.txt together with pip, it is strongly advised to create a virtual environment to encapsulate code for this project. This can be done using the package virtualenv via run the following:
 
 ```python
 pip install virtualenv
 ```
+
+Afterwhich one can run,
+
+```python 
+python virtualenv create env -n urlscamdetection
+```
+
+The other option is to use Anaconda's native virtual environment support as follows:
+
+```python
+conda create -n urlscamdetection 
+```
+
+And activating it as follows:
+
+```python
+conda activate urlscamdetection
+```
+
+Finally, regardless of which method was used to instantiate the virtual environment, you can install packages via requirements.txt using:
+
+```python
+pip install -r requirements.txt
+```
+
 
 Then create a new environment for this project, for example 'urlscamdetection'. Afterwards, enter this new environment using the command below,
 
