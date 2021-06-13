@@ -24,11 +24,15 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
+from scipy.stats import spearmanr
+from scipy.cluster import hierarchy
 
 from src.feature_helper_functions import *
 
 pd.set_option('display.max_columns', 500)
 pd.options.mode.chained_assignment = None
+from sklearn import set_config
+set_config(display='diagram')
 
 # ----------------------------------------------------------------------------
 # STEP 1: ENVIRONMENT CONSTANTS AND DATA LOADING
@@ -82,6 +86,8 @@ url_field = ['domain']
 # to directly see behaviour against the dependent variable later graphically,
 # rather than adhere to modelling best practices and model assumptions
 
+# for the below, to make plots more visibly interpretable, we use a smaller reduced dimension of 10 for the Truncated SVD.
+# in the models, we capture more information and find a tuned parameter of 50 to be more optimal
 hashing_feature_pipe = Pipeline([
     ('url_text_features', Pipeline([
                         ('text_selector', text_fetcher),
@@ -91,7 +97,7 @@ hashing_feature_pipe = Pipeline([
                                    ngram_range=(2, 3), 
                                    analyzer="char")),
                         ('tfidf_transformer', TfidfTransformer()),
-                        ('svd', TruncatedSVD(n_components=50))
+                        ('svd', TruncatedSVD(n_components=10))
                     ]))
     ])
 
@@ -100,7 +106,8 @@ lexical_feature_pipe = Pipeline([
         transformer_list=[
           ('alexa_features', Pipeline([
                         ('numeric_selector', other_data_fetcher),
-                        ('log_transformer', log_transformer)
+                        ('log_transformer', log_transformer),
+                        ('minmaxscaler', MinMaxScaler())
                     ])),
           ('url_lexical_features',
                         ColumnTransformer([
@@ -128,13 +135,22 @@ lexical_feature_pipe = Pipeline([
         ])),
     ])
 
+
 # define the lexical features, later adding back the dependent variable
 df_url_data_lexical_features = lexical_feature_pipe.fit_transform(df_url_data.drop(['label'], axis = 1))
-df_url_data_lexical_features['label'] = df_url_data['label']
+df_url_data_lexical_features = pd.DataFrame(df_url_data_lexical_features)
+df_url_data_lexical_features.columns = ['Alexa Ranking', 'Has IP Address', 'Has At Symbol', 'Short URL', 'Sub Domain Len', 'Hyphen', 'Double Slash', 'URL Length', 'Dir Path Length',
+                                        'Digit Letter Ratio', 'Num Digits', 'Num www', 'Query Terms', 'Special Characters']
+df_url_data_lexical_features['Label'] = df_url_data['label']
 
 # define the hashing features, later adding back the dependent variable
 df_url_data_hashing_features = hashing_feature_pipe.fit_transform(df_url_data.drop(['label'], axis = 1))
-df_url_data_hashing_features['label'] = df_url_data['label']
+df_url_data_hashing_features = pd.DataFrame(df_url_data_hashing_features)
+df_url_data_hashing_features.columns = ['Hash' + str(i+1) for i in range(len(df_url_data_hashing_features.columns))]
+df_url_data_hashing_features['Label'] = df_url_data['label']
+
+df_url_data_all_features = pd.concat([df_url_data_lexical_features.drop(['Label'], axis = 1), 
+                                      df_url_data_hashing_features], axis = 1)
 
 # ----------------------------------------------------------------------------
 # STEP 3: EXPLORATORY ANALYTICS ON ENGINEERED FEATURES
@@ -142,11 +158,23 @@ df_url_data_hashing_features['label'] = df_url_data['label']
 
 # checking how the ranking distributes
 # using a histogram on the ranking variable
-sns.histplot(x=np.log(df_url_data['ranking']))
+sns.histplot(x=np.log(df_url_data_all_features['Alexa Ranking']))
 
 # checking how the length of the url distributes
 # using a historgram on the url_length
-sns.histplot(x=np.log(df_url_data['url_length']))
+sns.histplot(x=np.log(df_url_data_all_features['URL Length']))
+
+# scatter plot among all important features in the dataset
+sns.pairplot(df_url_data_all_features[['Alexa Ranking', 'URL Length', 'Num www', 'Digit Letter Ratio', 'Dir Path Length', 'Special Characters', 'Label']].sample(frac=0.05), hue="Label")
+# scatter plot among some hash features in the dataset
+sns.pairplot(df_url_data_hashing_features[['Hash1', 'Hash2', 'Hash3', 'Hash4', 'Hash5', 'Label']].sample(frac=0.05), hue="Label")
+
+# plot some categoricals via a faceted bar plot
+cat_data = df_url_data_lexical_features[['Has At Symbol', 'Short URL', 'Hyphen', 'Double Slash', 'Query Terms', 'Label']]
+g = sns.catplot(data=cat_data, x='Label', col='Has At Symbol', kind='count')
+g.add_legend()
+
+plt.show()
 
 # ----------------------------------------------------------------------------
 # STEP 4: EXAMINING MULTI-COLLINEARITY OF FEATURES
@@ -154,10 +182,10 @@ sns.histplot(x=np.log(df_url_data['url_length']))
 
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
-corr = spearmanr(X).correlation
+corr = spearmanr(df_url_data_all_features.drop(['Has IP Address'], axis=1)).correlation
 corr_linkage = hierarchy.ward(corr)
 dendro = hierarchy.dendrogram(
-    corr_linkage, labels=data.feature_names.tolist(), ax=ax1, leaf_rotation=90
+    corr_linkage, labels=df_url_data_all_features.columns.tolist(), ax=ax1, leaf_rotation=90
 )
 dendro_idx = np.arange(0, len(dendro['ivl']))
 
