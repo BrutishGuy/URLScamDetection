@@ -35,12 +35,12 @@ from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, StandardSca
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.decomposition import TruncatedSVD
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score,plot_confusion_matrix
 from sklearn.inspection import permutation_importance
 
 from joblib import dump, load
 
-from src.feature_helper_functions import *
+from feature_helper_functions import *
 
 from hpsklearn import HyperoptEstimator, any_classifier, any_preprocessing
 from hyperopt import tpe
@@ -291,7 +291,20 @@ def main():
     
     df_url_all = pd.concat([df_url_data_hashing_features, df_url_data_lexical_features], axis = 1)
     clf = xgb.XGBClassifier(objective="binary:logistic", random_state=42)
-    clf.fit(df_url_all, y)
+    
+    # final split for confusion matrix and feature importance
+    X_train, X_test, y_train, y_test = train_test_split(df_url_all, y, test_size=0.3, random_state=0)
+
+    clf.fit(X_train, y_train)
+    
+    # plot a confusion matrix of the final result
+    disp = plot_confusion_matrix(clf, X_test, y_test,
+                                 display_labels=['Not Scam', 'Scam'],
+                                 cmap=plt.cm.Blues)
+    disp.ax_.set_title('Confusion matrix for XGBoost')
+
+    print(title)
+    
     # use permuation feature based importance as this is more reliable than tree based feature importances
     # since these determine importance based on number of times a feature is used in a split
     result = permutation_importance(clf, df_url_all, y, n_repeats=10,

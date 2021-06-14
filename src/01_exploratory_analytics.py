@@ -28,7 +28,7 @@ from scipy.stats import spearmanr
 from scipy.cluster import hierarchy
 import association_metrics as am
 
-from src.feature_helper_functions import *
+from feature_helper_functions import *
 
 pd.set_option('display.max_columns', 500)
 pd.options.mode.chained_assignment = None

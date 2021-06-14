@@ -76,11 +76,27 @@ These lexical features can be expanded on much further, as there is always a ric
 ## Exploratory Analysis
 We finally come to the exploratory analysis after looking at the data description and feature engineering done on top of the data. We specifically want to analyze the relationship between the hashing trick derived features to the dependent variable, label, and then do the same with the lexical URL features we defined above, to see if any have any added value to be used as a predictor against the dependent variable in the model. One additional note to mention is that the dependent variable is already **quite balanced**, hence not re-balancing techniques such as oversampling or undersampling need to be employed later on before modelling.
 
-We should also examine collinearity among variables to ensure that we don't harm the convergence of the models we try, nor skew the coefficients of models such as our baseline (see below in Methodology) Logistic Regression model.
+We should also examine collinearity among variables to ensure that we don't harm the convergence of the models we try, nor skew the coefficients of models such as our baseline (see below in Methodology) Logistic Regression model. To this effect we use the following mechanism to test for multicollinearity: We take the spearman's rank correlation coefficient of numerical variables and have a look at which are correlated. If there is a very high correlation (>0.6), then we use a hierarchical clustering to help us choose grouped variables by this correlation, and pick one of them to represent them all in the final data. This result is shown below for all the features including hashing trick features. We see that for our features, the only highly correlated variables are those in the lexical features group, specifically among 'Num Digits' and 'Ratio Digits to Letters' which makes sense. We should choose only one of these to use in our models.
 
-To this effect, for the hashing trick based features, as was described above, we take the final output from the Truncated SVD step mentioned and create a set of boxplots grouped on the dependent variable gain a quick glimpse into how each features relates to the others and to the dependent variable, label. This is seen in the figure below.
+![Multicollinearity test among numerical features.](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/multicollinearity_test.PNG)
 
-For the lexical features, we perform similar analyses via a scatter plot matrix for numerical features, and grouped bar plots of instance counts grouped on the dependent variable. This can be seen in the figures below. 
+
+To this effect, for the hashing trick based features, as was described above, we take the final output from the Truncated SVD step mentioned and create a set of scatterplots grouped on the dependent variable to a gain a quick glimpse into how each features relates to the others and to the dependent variable, label. This is seen in the figure below.
+
+![Scatterplot matrix for hashing trick features](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/scatterplot_hashes.PNG)
+
+We see that the hashing trick with bigrams and trigrams creates some amazing patterns which a model can exploit. This is especially seen in some of the scatter plots and some of the density plots above. We can take a similar approach for numerical variables from our lexical feature set and see how that looks. We plot this below.
+
+![Scatterplot matrix for lexical features](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/scatterplot_numeric.PNG)
+
+For the lexical features, it is not always as obvious a pattern as it was for the hashing feature sets, but some features such as 'Num www', the number of 'www' strings in a URL, have some amazing effects in tandem with the dependent variable, label. URL Length is another great example of a feature that has quite a varied distribution with respect to the dependent variable. In essence, this is exactly what we are looking for: We want our features, hashing trick or lexical, to have varied distribution with respect to the dependent such that they have potential to model against it.
+
+Finally, we have a few categorical/binary features to illustrate to see their behaviour in regards to the dependent variable. We don't want to waste too much time on this with many bar plots etc., so we use a clever little trick by exploiting the Cramer's V association metric to give us a 'cheat' correlation matrix of sorts between the categoricals and the dependent variable. This is shown below, and we immediately see that 'Hyphen', whether a URL has a hyphen in it, seems to have the highest (albeit modest) association with the dependent.
+
+![Cramer's V](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/cramersv.PNG)
+
+These plots show that the features we have built for the most part are hopefully good predictors of a URL's phishing capability. A final note on these featues is on data leakage. Considering they are all built from the URL itself, it is safe to say that no data leakage can be found here.
+
 
 ## Methodology
 
@@ -146,9 +162,20 @@ We can see that even in the absence of hand-crafted informative features, alread
 
 The subsequent addition of the lexical or hand-crafted features lets us really squeeze out the final performance we are looking for, giving us 95 precision and 96 recall. The ROCAUC already being a remarkable 99. Overall, this is remarkable given the only information we have is from the content of the URL itself, and nothing of the website sitting behind the URL. The Recall of 96 can be interpreted very well as follows: Out of all the malicious/phishing URLs in the data, for every 100 our model correctly captures 96 of them. This is a very good result indeed, although some may say that there are still 4 malicious sites for every 100 out there still phishing users. The precision conversely says that for every 100 URls the model decides are malicious, 95 are indeed malicious. This would mean that 5 legitimate sites would potentially be unintentionally blacklisted by the model.
 
+We also offer a confusion matrix of the XGBoost model run on all features below. Again, we see there is a fair balance between FP and FN, which tells us the high values for ROCAUC and the close values between precision and recall we see up above do indeed make sense.
+
+![Confusion matrix for XGBoost on all features](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/confusion_matrix_XGBoost_all_features.PNG)
+
 The feature importances of the XGBoost model are shown for the lexical features below. The first feature importance plot below is that of XGBoost on lexical features alone.
 
-![XGBoost feature importance on lexical features](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/feature_importances_all_features.PNG)
+![XGBoost feature importance on all features](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/feature_importances_lexical.PNG)
+
+
+And then below they are shown for all features. Here it is even more apparently the effect that tree based feature importances can have in giving rise to bias. It is clear that the hashing trick features have a significant presence in the model, but the permutation based feature importances and tree based importances paint very different pictures as to which are best. One can argue that it is also a matter of perspective, since if one asks "Which features are most important in this model in particular?" then perhaps the tree based feature importances from XGBoost are adequate indeed as they highlight the proportion of splits which used some feature. But, if your question is "Which features are most important in modelling my dependent variable?" then one has to look at permutation based feature importances as these are more informative and directly test what effect changing a feature has on model performance.
+
+![XGBoost feature importance on all features](https://github.com/BrutishGuy/URLScamDetection/blob/master/analysis/feature_importances_all_features.PNG)
+
+For instance, tree based importances tell us the model used 'Num www', the number of 'www' strings in the URL, followed by URL length and then Alexa rating as its main split variables, whereas permutation based importances tell us that the the performance against the dependent variable under this model is most sensitive to Alexa ranking, URL length and then only by 'Num www'. An interesting difference indeed. Another main takeaway to mention again, is that the hashing features while being less interpretable, add huge value to the performance of the model.
 
 ## Conclusion and Discussion
 

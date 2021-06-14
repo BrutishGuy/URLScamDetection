@@ -8,7 +8,7 @@ import socket
 import whois
 import time
 import sys
-from src.patterns import *
+from patterns import *
 import numpy as np
 import pandas as pd
 
